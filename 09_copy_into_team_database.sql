@@ -1,35 +1,28 @@
-/* =====================================================================
-   STEP 9: COPY THE CLEAN DATA INTO THE TEAM DATABASE (olist_ecommerce)
-   ---------------------------------------------------------------------
-   Why not CSV files? When Workbench exports a CSV, an empty value
-   (NULL) becomes an empty field. Loading an empty field into a date or
-   number column fails with "Incorrect datetime/integer value: ''".
-   Copying table to table inside MySQL keeps NULLs as NULLs and needs no
-   files at all.
+/* Step 9: copy the clean data into the team database (olist_ecommerce)
 
-   BEFORE RUNNING THIS SCRIPT:
-   1. Run the first two lines below (create + select the database).
-   2. Open Krish's OlistDb2.sql (File > Open SQL Script) and run it
-      completely (lightning bolt). It creates the 8 empty tables inside
-      olist_ecommerce because that database is now selected.
-   3. Come back to this script and run the rest, step by step.
-   ===================================================================== */
+   Not done through csv files because when Workbench exports a csv an
+   empty value (NULL) becomes an empty field, and loading that into a
+   date or number column fails ("Incorrect datetime/integer value: ''").
+   Copying table to table inside MySQL keeps the NULLs and needs no files.
+
+   Before running:
+   1. run the first two lines below (create and select the database)
+   2. open Krish's OlistDb2.sql and run it completely, it creates the 8
+      empty tables inside olist_ecommerce
+   3. come back here and run the rest step by step */
 CREATE DATABASE IF NOT EXISTS olist_ecommerce;
 USE olist_ecommerce;
 
 
-/* 9.1 Fix one column type in Krish's structure.
-   average_stock holds ranges like '1-5', '5-20', '200+'. Those are text,
-   not numbers, so DECIMAL(12,2) rejects them ("Incorrect decimal value:
-   '20-50'"). It must be text. */
+/* 9.1 fix one column type in Krish's structure
+   average_stock holds ranges like '1-5', '5-20', '200+'. That's text and
+   DECIMAL(12,2) rejects it ("Incorrect decimal value: '20-50'"). */
 ALTER TABLE closed_deals MODIFY average_stock VARCHAR(20) NULL;
 
 
-/* 9.2 Copy the data. INSERT INTO ... SELECT reads rows from one table and
-   adds them to another. olist.clean_orders means "the table clean_orders
-   in the schema olist" (where we did the cleaning).
-   Expected rows affected: 73 | 8,000 | 842 | 3,095 | 32,951 | 99,441 |
-   112,650 | 99,200 */
+/* 9.2 copy the data
+   olist.clean_orders means the table clean_orders in the schema olist,
+   where the cleaning was done. */
 INSERT INTO category_translation (product_category_name, product_category_name_english)
 SELECT product_category_name, product_category_name_english FROM olist.clean_category_translation;
 
@@ -68,9 +61,9 @@ SELECT review_id, order_id, review_score, review_creation_date, review_answer_ti
 FROM olist.clean_order_reviews;
 
 
-/* 9.3 VERIFY: same row counts and same total sales as the clean tables.
-   Expected: 73, 8000, 842, 3095, 32951, 99441, 112650, 99200,
-   total price 13591643.70, NULL delivered dates 2965 (NULLs kept). */
+/* 9.3 verify
+   row counts and total sales should match the clean tables, and the NULL
+   delivered dates should still be NULL */
 SELECT (SELECT COUNT(*) FROM category_translation)      AS category_translation,
        (SELECT COUNT(*) FROM marketing_qualified_leads) AS marketing_qualified_leads,
        (SELECT COUNT(*) FROM closed_deals)              AS closed_deals,

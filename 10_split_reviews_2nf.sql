@@ -1,33 +1,30 @@
-/* =====================================================================
-   STEP 10: SPLIT order_reviews INTO reviews + review_orders (2NF)
+/* Step 10 (2NF): split order_reviews into reviews and review_orders
    Database: olist_ecommerce
 
-   The problem (Second Normal Form):
-   order_reviews has a two-column key (review_id, order_id), but
-   review_score, review_creation_date and review_answer_timestamp depend
-   on review_id ALONE. When one review is linked to several orders, those
-   values are repeated on every row. That is a partial dependency, which
-   2NF does not allow.
+   The problem: order_reviews has a two column key (review_id, order_id),
+   but review_score, review_creation_date and review_answer_timestamp
+   depend on review_id alone. When one review is linked to several orders
+   those values are repeated on every row. That's a partial dependency and
+   2NF doesn't allow it.
 
-   The fix: store each review once, and the review-order links separately.
+   The fix: store each review once and the review-order links separately.
      reviews       (review_id PK, review_score, review_creation_date,
-                    review_answer_timestamp)          one row per review
-     review_orders (review_id, order_id)  PK = both   one row per link
-   Orders and reviews are many-to-many (an order can have 2 reviews, a
-   review can cover 2 orders); review_orders is the link table between them.
+                    review_answer_timestamp)         one row per review
+     review_orders (review_id, order_id), PK is both   one row per link
+   Orders and reviews are many to many (an order can have 2 reviews and a
+   review can cover 2 orders), review_orders is the link table.
 
-   Run AFTER 09. (If you already ran the region/summary script, that is
-   fine too: the summary's review scores are checked at the end.)
-   ===================================================================== */
+   Run after 09. If the region/summary script was already run that's fine
+   too, the summary's review scores are checked at the end. */
 USE olist_ecommerce;
 SET SQL_SAFE_UPDATES = 0;
 
 
-/* ---------- 10.1 CHECK the dependency before splitting ----------
-   If a review_id ever had two different scores or dates, splitting would
-   lose information, so we prove it never happens.
-   Expected: 779 review_ids linked to more than one order,
-             0 with different scores, 0 with different dates. */
+/* 10.1 check the dependency before splitting
+   If a review_id ever had two different scores or dates the split would
+   lose information, so we check that it never happens. 779 review_ids are
+   linked to more than one order, with 0 different scores and 0 different
+   dates. */
 SELECT COUNT(*)                     AS reviews_on_several_orders,
        SUM(n_scores > 1)            AS with_different_scores,
        SUM(n_dates  > 1)            AS with_different_dates
@@ -39,9 +36,9 @@ FROM (SELECT review_id,
       HAVING COUNT(*) > 1) x;
 
 
-/* ---------- 10.2 Create the two new tables ----------
-   Same character set and collation as the other tables, so the foreign
-   keys work. The CHECK keeps scores between 1 and 5, as before. */
+/* 10.2 create the two new tables
+   Same character set and collation as the other tables so the foreign
+   keys work. The CHECK keeps scores between 1 and 5 like before. */
 DROP TABLE IF EXISTS review_orders;
 DROP TABLE IF EXISTS reviews;
 
@@ -63,10 +60,10 @@ CREATE TABLE review_orders (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 
-/* ---------- 10.3 Fill them ----------
-   reviews: SELECT DISTINCT keeps one row per review (10.1 proved the
-   repeated rows are identical).          Expected rows affected: 98,396
-   review_orders: every (review, order) pair.  Expected: 99,200 */
+/* 10.3 fill them
+   reviews: SELECT DISTINCT keeps one row per review (10.1 showed the
+   repeated rows are identical), 98,396 rows.
+   review_orders: every (review, order) pair, 99,200 rows. */
 INSERT INTO reviews (review_id, review_score, review_creation_date, review_answer_timestamp)
 SELECT DISTINCT review_id, review_score, review_creation_date, review_answer_timestamp
 FROM order_reviews;
@@ -76,10 +73,10 @@ SELECT review_id, order_id
 FROM order_reviews;
 
 
-/* ---------- 10.4 VERIFY: nothing lost ----------
+/* 10.4 verify that nothing was lost
    Joining the two new tables back together must give exactly the old
-   table: same number of rows and no row that differs.
-   Expected: 98,396 | 99,200 | 99,200 | 0 */
+   table, same number of rows and no row that differs (98,396 reviews,
+   99,200 links, 99,200 rebuilt rows, 0 that differ). */
 SELECT (SELECT COUNT(*) FROM reviews)       AS reviews,
        (SELECT COUNT(*) FROM review_orders) AS review_orders,
        (SELECT COUNT(*) FROM review_orders ro JOIN reviews r ON r.review_id = ro.review_id) AS rebuilt_rows,
@@ -93,18 +90,18 @@ SELECT (SELECT COUNT(*) FROM reviews)       AS reviews,
             OR r.review_answer_timestamp <> o.review_answer_timestamp) AS rows_that_differ;
 
 
-/* ---------- 10.5 Remove the old table ----------
+/* 10.5 remove the old table
    Only after 10.4 shows 0 differences. Keeping it would store every
-   review twice, which is exactly the redundancy we are removing.
-   (Its foreign key to orders is removed with it. The data also still
-   exists in clean_order_reviews in the olist cleaning schema.) */
+   review twice, which is the redundancy we are removing. Its foreign key
+   to orders goes with it. The data also still exists in
+   clean_order_reviews in the olist cleaning schema. */
 DROP TABLE order_reviews;
 
 
-/* ---------- 10.6 Only if you ALREADY built seller_retention_summary ----------
+/* 10.6 only if seller_retention_summary was already built
    Recalculate each seller's average review score from the new tables and
-   compare with what is stored. Expected: 1,351 sellers compared, 0 differ.
-   (If the summary does not exist yet, skip this query.) */
+   compare with what is stored, nothing should differ (1,351 sellers).
+   Skip this query if the summary doesn't exist yet. */
 WITH q1_orders AS (
     SELECT DISTINCT i.seller_id, i.order_id
     FROM order_items i
